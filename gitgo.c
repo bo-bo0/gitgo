@@ -20,6 +20,7 @@ typedef enum
     GIT_TAG_CREATE,
     GIT_TAG_PUSH,
     GIT_PUSH,
+    GIT_RESET,
     MEM_ALLOC_FAIL
 } GitgoExitCode;
 
@@ -36,10 +37,22 @@ void input_to_data(int argc, const char** argv, InputData* data);
 int search_in(const char* target, const char** strings, int size); 
 void gitgo_exit(GitgoExitCode code); 
 void git_execute(const char* commit_command, const char* tag_create_command);
+bool whoops_check(int argc, const char** argv);
 void* s_malloc(size_t size);
 
 int main(int argc, const char** argv) 
 {
+    if (whoops_check(argc, argv)) 
+    {
+        if (system("git reset --soft HEAD~1") != 0) 
+        { gitgo_exit(GIT_RESET); }
+
+        if (system("git push --force") != 0) 
+        { gitgo_exit(GIT_PUSH); }
+
+        gitgo_exit(SUCCESS);
+    }
+
     InputData data;
     input_to_data(argc, argv, &data);
 
@@ -200,6 +213,10 @@ void gitgo_exit(GitgoExitCode code)
             error_message = "git push failed (git error)";
             break;
 
+        case GIT_RESET:
+            error_message = "git reset failed (git error)";
+            break;
+
         case MEM_ALLOC_FAIL:
             error_message = "memory allocation failed";
             break;
@@ -252,6 +269,41 @@ void git_execute(const char* commit_command, const char* tag_create_command)
 
     if (g_pusherr != 0) 
     { gitgo_exit(GIT_PUSH); }
+}
+
+bool whoops_check(int argc, const char** argv) 
+{
+    bool do_whoops = false;
+
+    const char* whps = "whoops"; 
+    int len = strlen(whps);
+    if ((argc == 2 || argc == 3) && (strncmp(argv[1], whps, len) == 0)) 
+    {
+        if (argc == 3) 
+        {
+            if (strncmp(argv[2], "-y", strlen(argv[2])) == 0) 
+            { do_whoops = true; }
+        }
+        else if (argc == 2) 
+        {
+            printf("Warning: ");
+            printf("gitgo whoops will rewrite git history, that could cause ");
+            printf("conflicts in shared repositories, are you sure?[y/n]: ");
+
+            char choice;
+            scanf(" %c", &choice);
+
+            if (tolower(choice) != 'y') 
+            {
+                puts("Operation aborted");
+                gitgo_exit(SUCCESS);
+            }
+
+            do_whoops = true;
+        }
+    }
+
+    return do_whoops;
 }
 
 void* s_malloc(size_t size) 
